@@ -1,17 +1,21 @@
+
 {
-  "name": "MJG Analizador de notas Pro",
-  "short_name": "MJG Notas",
-  "start_url": "index.html",
-  "display": "standalone",
-  "background_color": "#0a0e14",
-  "theme_color": "#0a0e14",
-  "orientation": "portrait",
+  "short_name": "MJG Notas", 
+  "name": "MJG Analizador de notas",
   "icons": [
     {
-      "src": "icon.png",
-      "sizes": "512x512",
+      "src": "icono.png",
       "type": "image/png",
-      "purpose": "any maskable"
+      "sizes": "192x192"
+    },
+    {
+      "src": "icono-grande.png", 
+      "type": "image/png",
+      "sizes": "512x512"
     }
-  ]
+  ],
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
 }
