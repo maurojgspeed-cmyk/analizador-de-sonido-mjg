@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Analizador de Sonido - MJG</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Analizador de Sonido">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+
+    <style>
+        body { background: #0a0e14; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        .brand { font-size: 2.5rem; letter-spacing: 8px; color: #00d4ff; font-weight: bold; text-shadow: 0 0 15px rgba(0,212,255,0.3); }
+        h1 { font-weight: 200; font-size: 0.9rem; letter-spacing: 3px; color: #666; text-transform: uppercase; margin-bottom: 20px; }
+        
+        /* Contenedor de nota con octava */
+        #nota-wrap { margin: 10px 0; }
+        #nota { font-size: 7rem; font-weight: bold; color: #fff; line-height: 1; display: inline-block; }
+        #octava { font-size: 2.5rem; color: #00d4ff; vertical-align: super; font-weight: bold; }
+        
+        .tuner-container { width: 80%; max-width: 400px; margin: 10px auto 30px auto; position: relative; }
+        .tuner-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; position: relative; }
+        .tuner-center { position: absolute; left: 50%; top: -5px; width: 2px; height: 14px; background: #00d4ff; }
+        #pointer { position: absolute; left: 50%; top: -8px; width: 12px; height: 12px; background: #fff; border-radius: 50%; transform: translateX(-50%); transition: left 0.1s ease-out; box-shadow: 0 0 10px #fff; }
+        .tuner-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: #444; margin-top: 8px; }
+
+        #freq, #bpm { font-size: 1.5rem; color: #888; margin: 5px; }
+        #bpm { color: #ff4757; font-weight: bold; }
+        
+        canvas { width: 90%; max-width: 600px; height: 100px; background: rgba(255,255,255,0.02); border-radius: 20px; margin: 10px auto; border: 1px solid rgba(0,212,255,0.1); }
+        button { padding: 15px 45px; font-size: 1rem; cursor: pointer; border-radius: 50px; border: 2px solid #00d4ff; background: transparent; color: #00d4ff; font-weight: bold; transition: 0.4s; letter-spacing: 2px; }
+        button:hover { background: #00d4ff; color: #0a0e14; }
+        .footer { font-size: 0.7rem; color: #333; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="brand">MJG</div>
+    <h1>Analizador de Sonido</h1>
+    
+    <div id="nota-wrap">
+        <span id="nota">--</span><span id="octava"></span>
+    </div>
+
+    <div class="tuner-container">
+        <div class="tuner-bar">
+            <div class="tuner-center"></div>
+            <div id="pointer"></div>
+        </div>
+        <div class="tuner-labels"><span>BEMOL</span><span>AFINADO</span><span>SOSTENIDO</span></div>
+    </div>
+
+    <div id="freq">0 Hz</div>
+    <div id="bpm">BPM: --</div>
+    
+    <canvas id="visualizer"></canvas>
+
+    <button id="startBtn" onclick="startApp()">ACTIVAR MICRÓFONO</button>
+
+    <div class="footer">ANALIZADOR DE SONIDO &bull; MJG &bull; 2026</div>
+
+    <script>
+        let audioCtx, analyser, dataArray;
+        let lastBeatTime = 0;
+        let beatThreshold = 0.12; 
+        const noteStrings = ["DO", "DO#", "RE", "RE#", "MI", "FA", "FA#", "SOL", "SOL#", "LA", "LA#", "SI"];
+
+        async function startApp() {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioCtx.createMediaStreamSource(stream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 2048;
+                source.connect(analyser);
+                dataArray = new Float32Array(analyser.frequencyBinCount);
+                document.getElementById('startBtn').style.display = 'none';
+                
+                detectPitch();
+                detectBPM();
+                drawVisualizer();
+            } catch (err) {
+                alert("Acceso denegado al micrófono.");
+            }
+        }
+
+        function detectPitch() {
+            analyser.getFloatTimeDomainData(dataArray);
+            let pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
+            if (pitch !== -1) {
+                let noteNum = 12 * (Math.log(pitch / 440) / Math.log(2)) + 69;
+                let roundedNote = Math.round(noteNum);
+                let cents = Math.floor(100 * (noteNum - roundedNote));
+                
+                // MEJORA: Cálculo de octava
+                let octava = Math.floor(roundedNote / 12) - 1;
+                
+                document.getElementById('nota').innerText = noteStrings[roundedNote % 12];
+                document.getElementById('octava').innerText = octava >= 0 ? octava : "";
+                document.getElementById('freq').innerText = Math.round(pitch) + " Hz";
+                
+                // MEJORA: Estabilidad del afinador
+                let visualPos = 50 + cents; 
+                if(visualPos < 5) visualPos = 5; if(visualPos > 95) visualPos = 95;
+                document.getElementById('pointer').style.left = visualPos + "%";
+                document.getElementById('pointer').style.background = Math.abs(cents) < 5 ? "#00d4ff" : "#fff";
+            }
+            requestAnimationFrame(detectPitch);
+        }
+
+        function detectBPM() {
+            analyser.getFloatTimeDomainData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+            let volume = Math.sqrt(sum / dataArray.length);
+            
+            // MEJORA: Ritmo más estable
+            if (volume > beatThreshold && (Date.now() - lastBeatTime) > 300) {
+                let currentTime = Date.now();
+                if (lastBeatTime !== 0) {
+                    let duration = currentTime - lastBeatTime;
+                    let bpm = Math.round(60000 / duration);
+                    if (bpm > 40 && bpm < 220) {
+                        document.getElementById('bpm').innerText = "BPM: " + bpm;
+                    }
+                }
+                lastBeatTime = currentTime;
+            }
+            requestAnimationFrame(detectBPM);
+        }
+
+        function autoCorrelate(buf, sampleRate) {
+            let SIZE = buf.length; 
+            let rms = 0;
+            for (let i=0; i<SIZE; i++) { rms += buf[i]*buf[i]; }
+            if (Math.sqrt(rms/SIZE) < 0.01) return -1;
+
+            let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+            for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+            for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+            buf = buf.slice(r1, r2); SIZE = buf.length;
+            
+            let c = new Array(SIZE).fill(0);
+            for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE - i; j++) c[i] = c[i] + buf[j] * buf[j + i];
+            
+            let d = 0; while (c[d] > c[d + 1]) d++;
+            let maxval = -1, maxpos = -1;
+            for (let i = d; i < SIZE; i++) if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+            return sampleRate / maxpos;
+        }
+
+        function drawVisualizer() {
+            const canvas = document.getElementById("visualizer");
+            const ctx = canvas.getContext("2d");
+            const bufferLength = analyser.frequencyBinCount;
+            const data = new Uint8Array(bufferLength);
+            function render() {
+                analyser.getByteTimeDomainData(data);
+                ctx.fillStyle = '#0a0e14'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.lineWidth = 3; ctx.strokeStyle = '#00d4ff';
+                ctx.beginPath();
+                let sliceWidth = canvas.width / bufferLength; let x = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                    let v = data[i] / 128.0; let y = (v * canvas.height / 2);
+                    if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    x += sliceWidth;
+                }
+                ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
+                requestAnimationFrame(render);
+            }
+            render();
+        }
+    </script>
+</body>
+</html>
